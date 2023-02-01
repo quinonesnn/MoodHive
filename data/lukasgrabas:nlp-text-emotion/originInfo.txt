@@ -1,0 +1,2 @@
+https://github.com/lukasgarbas/nlp-text-emotion/blob/master/data/datasets/emotion-stimulus.csv
+
