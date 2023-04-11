@@ -1,55 +1,31 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import joblib
 import chatgpt
+from ModelPredictions import predict_samples
+from ModelPredictions import preprocess_corpus
+from ModelPredictions import BERTmodel
+from gensim.summarization import keywords
 
 
-LRpipe = joblib.load(
-    "/Users/nickq/Repos/MoodHive/Models/EmotionLogisticRegressionModel-02-01-23.pkl")
+def extract_keywords(text, num_keywords=5):
+    return keywords(text, words=num_keywords).split('\n')
 
 
-def predictEmotion(text):
-    return LRpipe.predict([text])[0]
-
-
-def getPredictProbability(text):
-    return LRpipe.predict_proba([text])
-
-
-def getTopEmotions(probability):
-    table = pd.DataFrame(probability, columns=LRpipe.classes_)
-    top = table.melt(var_name='Emotion', value_name='Probability').nlargest(
-        3, 'Probability')
-    return top
-
-# def getTopTopics(probability):
-#     table = pd.DataFrame(probability, columns=TopicPipe.classes_)
-#     top = table.melt(var_name='Emotion', value_name='Probability').nlargest(
-#         3, 'Probability')
-#     return top
-
-
-def getSelectedCheckboxes(boxOptions, box1, box2, box3):
-    # This gets the predicted emotions/topics that were selected when asked which best fit the journal
-    checkedList = []
-    if box1:
-        checkedList.append(boxOptions[0])
-    if box2:
-        checkedList.append(boxOptions[1])
-    if box3:
-        checkedList.append(boxOptions[2])
-    print("getSelectedCheckboxes clicked:", checkedList)
-
-    return checkedList
-
-
-def makeProbabilityTable(probability):
-    return pd.DataFrame(probability, columns=LRpipe.classes_)
+def get_selected_emotions(emotion1, emotion2, emotion3, predicted_emotions):
+    selected_emotions = []
+    if emotion1:
+        selected_emotions.append(predicted_emotions.iloc[0, 0])
+    if emotion2:
+        selected_emotions.append(predicted_emotions.iloc[1, 0])
+    if emotion3:
+        selected_emotions.append(predicted_emotions.iloc[2, 0])
+    return selected_emotions
 
 
 def main():
-    st.title("MoodHive")
+    st.set_page_config(layout="wide")
+    st.image("/Users/nickq/Repos/MoodHive/MoodHiveLogo.png", width=400)
     menu = ["Home", "Details"]
 
     choice = st.sidebar.selectbox("Menu", menu)
@@ -69,66 +45,42 @@ def main():
             st.session_state["journalBtn_state"] = True
 
             # Make prediction
-            emotionProbability = getPredictProbability(rawText)
-            #topicProbability = getPredictProbability(rawText)
+            prediction = predict_samples([rawText], BERTmodel)
+            keywords = extract_keywords(preprocess_corpus(rawText))
             st.subheader("Based on your journal entry...")
 
-            # Display top 3 predictions based on highest probability
-            emotionPredictionCol, topicPredictionCol = st.columns(2)
-            with emotionPredictionCol:
-                topEmotions = getTopEmotions(emotionProbability)
-                st.success("These are the top three emotions detected")
-                st.write(topEmotions)
+            predictionCol, selectionCol = st.columns(2)
+            with predictionCol:
+                # Display emotions and their probabilities
+                st.success(
+                    "These are the top three emotions detected along with their probabilities")
+                st.write(prediction)
 
-            with topicPredictionCol:
-                #topTopics = getTopTopics(topicProbability)
-                st.success("These are the top three topics detected")
-                # st.write(topTopics)
+            with selectionCol:
+                # Show form to select emotions and topics
+                with st.form(key="selectEmotionsForm"):
+                    st.write(
+                        "Please select the emotion(s) that best fit your entry for today:")
 
-            # Show form to select emotions and topics
-            with st.form(key="selectEmotionsForm"):
-                st.write(
-                    "Please select the emotion(s) and topic(s) that best fit your entry for today:")
+                    emotion1 = st.checkbox(prediction.iloc[0, 0])
+                    emotion2 = st.checkbox(prediction.iloc[1, 0])
+                    emotion3 = st.checkbox(prediction.iloc[2, 0])
 
-                predictedEmotions = [topEmotions.iloc[0, 0],
-                                     topEmotions.iloc[1, 0],
-                                     topEmotions.iloc[2, 0]]
-                # predictedTopics = [topTopics.iloc[0, 0],
-                #                    topTopics.iloc[1, 0],
-                #                    topTopics.iloc[2, 0]]
-
-                emotionSelectionCol, topicSelectionCol = st.columns(2)
-
-                with emotionSelectionCol:
-                    emotion1 = st.checkbox(predictedEmotions[0])
-                    emotion2 = st.checkbox(predictedEmotions[1])
-                    emotion3 = st.checkbox(predictedEmotions[2])
-                with topicSelectionCol:
-                    topic1 = st.checkbox("topic1")
-                    topic2 = st.checkbox("topic2")
-                    topic3 = st.checkbox("topic3")
-                    # topic1 = st.checkbox(predictedTopics[0])
-                    # topic2 = st.checkbox(predictedTopics[1])
-                    # topic3 = st.checkbox(predictedTopics[2])
-
-                submitCheckboxBtn = st.form_submit_button(
-                    label="Submit Selection")
+                    submitCheckboxBtn = st.form_submit_button(
+                        label="Submit Selection")
 
             if submitCheckboxBtn:
                 st.subheader("Here is some advice based on...")
-                selectedEmotions = getSelectedCheckboxes(
-                    predictedEmotions, emotion1, emotion2, emotion3)
-                # selectedTopics = getSelectedCheckboxes(
-                #     predictedTopics, topic1, topic2, topic3)
+                selected_emotions = get_selected_emotions(
+                    emotion1, emotion2, emotion3, prediction)
                 st.caption("these emotion(s): {}".format(
-                    ", ".join(selectedEmotions)))
-                # st.caption("these topics(s): {}".format(
-                #     ", ".join(selectedTopics)))
+                    ", ".join(selected_emotions)))
 
-                # st.write(chatgpt.askAdvice(predictedEmotions))
+                # Replace the following line with the actual ChatGPT function to generate advice
+                st.write(chatgpt.askAdvice(selected_emotions, keywords))
 
     elif choice == "Details":
-        st.subheader("Details")
+        st.subheader("Go Emotion Taxonomy")
 
 
 if __name__ == '__main__':
